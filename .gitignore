@@ -1,0 +1,43 @@
+# =========================
+# DATA (never track)
+# =========================
+
+data/*
+!data/.gitkeep
+!data/README.md
+
+# =========================
+# OUTPUTS
+# =========================
+
+outputs/*
+!outputs/.gitkeep
+
+# =========================
+# R specific
+# =========================
+
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# =========================
+# OS junk
+# =========================
+
+.DS_Store
+Thumbs.db
+
+# =========================
+# Large files
+# =========================
+
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.rds
+*.gz
+*.zip
+*.log
