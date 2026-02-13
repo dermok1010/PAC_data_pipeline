@@ -4,7 +4,7 @@ setwd("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/")
 
 pac_raw <- read.csv("data/PAC_data_before_edits.csv")
 
-
+n_distinct(pac_raw$ANI_ID)
 ###############################################################################
 ### PAC QC: CH4 + CO2 outlier removal (DROP failed records)
 ###############################################################################
@@ -68,6 +68,9 @@ pac_clean <- pac_qc1 %>%
   filter(!qc1_fail) %>%
   select(-qc1_fail)
 
+n_distinct(pac_clean$ANI_ID)
+n_distinct(pac_clean$keeper)
+
 # Re-check distributions after QC1
 summary(pac_clean$ch4_g_day2_1v3)
 summary(pac_clean$co2_g_day2_1v3)
@@ -125,7 +128,8 @@ print(cg_filter_summary)
 pac_clean <- pac_clean %>%
   filter(!is.na(ch4_g_day2_1v3), !is.na(co2_g_day2_1v3))
 
-
+nrow(pac_clean)
+n_distinct(pac_clean$ANI_ID)
 # Final check: counts and non-missing traits
 final_summary <- pac_clean %>%
   summarise(
@@ -163,8 +167,7 @@ write_csv(full_data, "data/PAC_outlier_removal_no_traits.csv")
 #################################################################
 
 
-# ANy animals falling in both categories will be treated as ewe
-
+# Any animals falling in both categories will be treated as ewe
 full_data <- full_data %>%
   mutate(
     bio_group = case_when(
@@ -238,9 +241,7 @@ table(full_data$bio_group, useNA = "ifany")
 
 ############################################################################
 
-
 ## Covariate outlier removal 
-
 
 #############################################################################
 
@@ -293,38 +294,42 @@ qc2_summary
 cov_both <- c("weight", "DMI")
 cov_grow <- c("adg", "ct_muscle_kg", "ct_rumen")
 
-summ_fun <- function(x) {
-  c(
-    n = sum(!is.na(x)),
-    mean = mean(x, na.rm = TRUE),
-    sd = sd(x, na.rm = TRUE),
-    min = min(x, na.rm = TRUE),
-    p1 = quantile(x, 0.01, na.rm = TRUE),
-    p5 = quantile(x, 0.05, na.rm = TRUE),
-    p50 = quantile(x, 0.50, na.rm = TRUE),
-    p95 = quantile(x, 0.95, na.rm = TRUE),
-    p99 = quantile(x, 0.99, na.rm = TRUE),
-    max = max(x, na.rm = TRUE)
-  )
+# ---- stats functions (1 row per group) ----
+stat_funs <- list(
+  n    = ~sum(!is.na(.x)),
+  mean = ~mean(.x, na.rm = TRUE),
+  sd   = ~sd(.x, na.rm = TRUE),
+  min  = ~min(.x, na.rm = TRUE),
+  p1   = ~as.numeric(quantile(.x, 0.01, na.rm = TRUE)),
+  p5   = ~as.numeric(quantile(.x, 0.05, na.rm = TRUE)),
+  p50  = ~as.numeric(quantile(.x, 0.50, na.rm = TRUE)),
+  p95  = ~as.numeric(quantile(.x, 0.95, na.rm = TRUE)),
+  p99  = ~as.numeric(quantile(.x, 0.99, na.rm = TRUE)),
+  max  = ~max(.x, na.rm = TRUE)
+)
+
+make_summary_table <- function(df, covs, stage_label) {
+  df %>%
+    filter(bio_group %in% c("ewe", "growing")) %>%
+    group_by(bio_group) %>%
+    summarise(
+      across(all_of(covs), stat_funs, .names = "{.col}_{.fn}"),
+      .groups = "drop"
+    ) %>%
+    mutate(stage = stage_label) %>%
+    relocate(stage, .after = bio_group)
 }
 
 # ---- BOTH GROUPS: weight + DMI ----
-before_both <- full_data %>%
-  filter(bio_group %in% c("ewe","growing")) %>%
-  group_by(bio_group) %>%
-  summarise(across(all_of(cov_both), summ_fun, .names = "{.col}_{.fn}"), .groups = "drop") %>%
-  mutate(stage = "before")
+cov_both <- c("weight", "DMI")
 
-after_both <- full_data_qc2 %>%
-  filter(bio_group %in% c("ewe","growing")) %>%
-  group_by(bio_group) %>%
-  summarise(across(all_of(cov_both), summ_fun, .names = "{.col}_{.fn}"), .groups = "drop") %>%
-  mutate(stage = "after")
+before_both <- make_summary_table(full_data,     cov_both, "before")
+after_both  <- make_summary_table(full_data_qc2, cov_both, "after")
 
-summary_both <- bind_rows(before_both, after_both) %>%
+summary_both_nice <- bind_rows(before_both, after_both) %>%
   arrange(bio_group, stage)
 
-print(summary_both, n = 100)
+View(summary_both_nice)
 
 
 before_grow <- full_data %>%

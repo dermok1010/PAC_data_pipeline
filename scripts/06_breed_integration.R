@@ -7,6 +7,7 @@ library(readr)
 
 # ---- Load breed source ----
 breed_data_raw <- read_sas("/home/dermot.kelly/Dermot_analysis/Phd/Paper_1/Phase_2_data/master_2024.sas7bdat")
+full_data2 <- read.csv("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/data/working_PAC_file_cg.csv")
 
 # Breed columns you care about
 breed_cols <- c(
