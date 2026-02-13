@@ -158,7 +158,7 @@ full_data <- pac_clean %>%
 
 write_csv(full_data, "data/PAC_outlier_removal_no_traits.csv")
 
-
+full_data <- read.csv("data/PAC_outlier_removal_no_traits.csv")
 
 #################################################################
 
@@ -291,80 +291,211 @@ qc2_summary <- tibble(
 qc2_summary
 
 
-cov_both <- c("weight", "DMI")
-cov_grow <- c("adg", "ct_muscle_kg", "ct_rumen")
 
-# ---- stats functions (1 row per group) ----
-stat_funs <- list(
-  n    = ~sum(!is.na(.x)),
-  mean = ~mean(.x, na.rm = TRUE),
-  sd   = ~sd(.x, na.rm = TRUE),
-  min  = ~min(.x, na.rm = TRUE),
-  p1   = ~as.numeric(quantile(.x, 0.01, na.rm = TRUE)),
-  p5   = ~as.numeric(quantile(.x, 0.05, na.rm = TRUE)),
-  p50  = ~as.numeric(quantile(.x, 0.50, na.rm = TRUE)),
-  p95  = ~as.numeric(quantile(.x, 0.95, na.rm = TRUE)),
-  p99  = ~as.numeric(quantile(.x, 0.99, na.rm = TRUE)),
-  max  = ~max(.x, na.rm = TRUE)
+availability_n_records_animals <- function(before_df,
+                                           after_df,
+                                           id_col = "ANI_ID",
+                                           group_col = "bio_group",
+                                           groups = c("ewe", "growing"),
+                                           vars = c("weight", "DMI")) {
+  
+  summarise_stage <- function(df, stage_label) {
+    
+    df2 <- df %>%
+      filter(.data[[group_col]] %in% groups)
+    
+    # Core counts by group
+    by_group_core <- df2 %>%
+      group_by(.data[[group_col]]) %>%
+      summarise(
+        n_records = n(),
+        n_animals = n_distinct(.data[[id_col]]),
+        .groups = "drop"
+      ) %>%
+      rename(bio_group = all_of(group_col)) %>%
+      mutate(stage = stage_label)
+    
+    # Optional: variable availability (records + animals)
+    if (!is.null(vars) && length(vars) > 0) {
+      vars <- intersect(vars, names(df2))
+      
+      by_group_vars <- df2 %>%
+        group_by(.data[[group_col]]) %>%
+        summarise(
+          across(all_of(vars), ~sum(!is.na(.x)), .names = "{.col}_records_nonNA"),
+          across(all_of(vars), ~n_distinct(.data[[id_col]][!is.na(.x)]), .names = "{.col}_animals_nonNA"),
+          .groups = "drop"
+        ) %>%
+        rename(bio_group = all_of(group_col))
+      
+      by_group <- by_group_core %>%
+        left_join(by_group_vars, by = "bio_group")
+    } else {
+      by_group <- by_group_core
+    }
+    
+    # Overall totals
+    overall_core <- df2 %>%
+      summarise(
+        n_records = n(),
+        n_animals = n_distinct(.data[[id_col]])
+      ) %>%
+      mutate(bio_group = "overall", stage = stage_label)
+    
+    if (!is.null(vars) && length(vars) > 0 && length(intersect(vars, names(df2))) > 0) {
+      vars <- intersect(vars, names(df2))
+      
+      overall_vars <- df2 %>%
+        summarise(
+          across(all_of(vars), ~sum(!is.na(.x)), .names = "{.col}_records_nonNA"),
+          across(all_of(vars), ~n_distinct(.data[[id_col]][!is.na(.x)]), .names = "{.col}_animals_nonNA")
+        ) %>%
+        mutate(bio_group = "overall")
+      
+      overall <- overall_core %>%
+        left_join(overall_vars, by = "bio_group")
+    } else {
+      overall <- overall_core
+    }
+    
+    bind_rows(by_group, overall) %>%
+      arrange(factor(bio_group, levels = c("ewe", "growing", "overall")))
+  }
+  
+  bind_rows(
+    summarise_stage(before_df, "before"),
+    summarise_stage(after_df,  "after")
+  ) %>%
+    select(stage, bio_group, everything())
+}
+
+# ---- Run it (weight + DMI included) ----
+avail_table <- availability_n_records_animals(
+  before_df = full_data,
+  after_df  = full_data_qc2,
+  vars      = c("ct_rumen", "ct_muscle_kg", "adg")
 )
 
-make_summary_table <- function(df, covs, stage_label) {
-  df %>%
-    filter(bio_group %in% c("ewe", "growing")) %>%
-    group_by(bio_group) %>%
+View(avail_table)
+
+##############################################################
+
+#### DMI indoor/outdoor
+
+##############################################################
+
+library(lubridate)
+print(head(full_data_qc2$DMI_Start_Date))
+
+season_data <- full_data_qc2 %>%
+  mutate(
+    DMI_Start_Date = as.Date(DMI_Start_Date),
+    DMI_month = month(DMI_Start_Date)
+  )
+
+# Label months
+season_data <- season_data %>%
+  mutate(
+    DMI_month_name = month(DMI_Start_Date, label = TRUE, abbr = TRUE)
+  )
+
+# See monthly distribution
+season_data %>%
+  filter(!is.na(DMI_month_name)) %>%
+  group_by(DMI_month_name) %>%
+  summarise(
+    n_records = n(),
+    n_animals = n_distinct(ANI_ID),
+    .groups = "drop"
+  ) %>%
+  arrange(DMI_month_name)
+
+
+# Further inspection is needed on October data
+season_data %>%
+  filter(DMI_month_name == "Oct") %>%
+  group_by(source, bio_group, diet_type) %>%
+  summarise(
+    n_records = n(),
+    n_animals = n_distinct(ANI_ID),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_records))
+
+
+
+flag_dmi_environment <- function(df,
+                                 date_col = "DMI_Start_Date",
+                                 month_name_col = "DMI_month_name",  # if already exists
+                                 id_col = "ANI_ID",
+                                 group_col = "bio_group",
+                                 indoor_months = c("Oct","Nov","Dec","Feb"),
+                                 outdoor_months = c("Apr","May","Jul","Aug"),
+                                 env_col = "dmi_env") {
+  
+  # Make sure we have a month name column (avoid lubridate; use base R)
+  if (!month_name_col %in% names(df)) {
+    stopifnot(date_col %in% names(df))
+    df <- df %>%
+      mutate(
+        "{date_col}" := as.Date(.data[[date_col]]),
+        "{month_name_col}" := factor(
+          format(.data[[date_col]], "%b"),
+          levels = c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"),
+          ordered = TRUE
+        )
+      )
+  }
+  
+  df2 <- df %>%
+    mutate(
+      "{env_col}" := case_when(
+        as.character(.data[[month_name_col]]) %in% indoor_months  ~ "indoor",
+        as.character(.data[[month_name_col]]) %in% outdoor_months ~ "outdoor",
+        TRUE ~ NA_character_
+      )
+    )
+  
+  # Summary: env x bio_group
+  by_env_group <- df2 %>%
+    filter(!is.na(.data[[env_col]]),
+           !is.na(.data[[group_col]]),
+           .data[[group_col]] %in% c("ewe","growing")) %>%
+    group_by(.data[[env_col]], .data[[group_col]]) %>%
     summarise(
-      across(all_of(covs), stat_funs, .names = "{.col}_{.fn}"),
+      n_records = n(),
+      n_animals = n_distinct(.data[[id_col]]),
       .groups = "drop"
     ) %>%
-    mutate(stage = stage_label) %>%
-    relocate(stage, .after = bio_group)
-}
-
-# ---- BOTH GROUPS: weight + DMI ----
-cov_both <- c("weight", "DMI")
-
-before_both <- make_summary_table(full_data,     cov_both, "before")
-after_both  <- make_summary_table(full_data_qc2, cov_both, "after")
-
-summary_both_nice <- bind_rows(before_both, after_both) %>%
-  arrange(bio_group, stage)
-
-View(summary_both_nice)
-
-
-before_grow <- full_data %>%
-  filter(bio_group == "growing") %>%
-  summarise(across(all_of(cov_grow), summ_fun, .names = "{.col}_{.fn}")) %>%
-  mutate(bio_group = "growing", stage = "before") %>%
-  select(bio_group, stage, everything())
-
-after_grow <- full_data_qc2 %>%
-  filter(bio_group == "growing") %>%
-  summarise(across(all_of(cov_grow), summ_fun, .names = "{.col}_{.fn}")) %>%
-  mutate(bio_group = "growing", stage = "after") %>%
-  select(bio_group, stage, everything())
-
-summary_grow <- bind_rows(before_grow, after_grow)
-
-summary_grow
-
-
-
-make_delta <- function(before_df, after_df, id_cols = c("bio_group")) {
-  b <- before_df %>% pivot_longer(-all_of(c(id_cols, "stage")), names_to = "metric", values_to = "before") %>%
-    filter(stage == "before") %>% select(-stage)
-  a <- after_df %>% pivot_longer(-all_of(c(id_cols, "stage")), names_to = "metric", values_to = "after") %>%
-    filter(stage == "after") %>% select(-stage)
+    rename(dmi_env = all_of(env_col), bio_group = all_of(group_col)) %>%
+    arrange(dmi_env, bio_group)
   
-  left_join(b, a, by = c(id_cols, "metric")) %>%
-    mutate(delta = after - before)
+  # Overall per env
+  overall_env <- df2 %>%
+    filter(!is.na(.data[[env_col]])) %>%
+    group_by(.data[[env_col]]) %>%
+    summarise(
+      n_records = n(),
+      n_animals = n_distinct(.data[[id_col]]),
+      .groups = "drop"
+    ) %>%
+    rename(dmi_env = all_of(env_col)) %>%
+    mutate(bio_group = "overall") %>%
+    relocate(bio_group, .after = dmi_env) %>%
+    arrange(dmi_env)
+  
+  list(
+    data = df2,
+    summary = bind_rows(by_env_group, overall_env) %>%
+      arrange(dmi_env, factor(bio_group, levels = c("ewe","growing","overall")))
+  )
 }
 
-delta_both <- make_delta(summary_both, summary_both, id_cols = c("bio_group"))
-delta_both
 
-delta_grow <- make_delta(summary_grow, summary_grow, id_cols = c("bio_group"))
-delta_grow
+res_env <- flag_dmi_environment(season_data)
+
+season_data2 <- res_env$data
+res_env$summary
 
 
 
