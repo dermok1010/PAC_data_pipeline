@@ -1,13 +1,18 @@
 
+# VM working version (2026-09-15) -- see 01_sheep_ire_merge.R header for full context.
+# Re-reads working_PAC_file_cg.csv from disk (05's output), so this and
+# every script after it can be run standalone rather than needing the
+# 01-05 in-memory session.
 
+setwd("/home/dermodkkelly/PAC_data_pipeline/")
 
 library(dplyr)
 library(haven)
 library(readr)
 
 # ---- Load breed source ----
-breed_data_raw <- read_sas("/home/dermot.kelly/Dermot_analysis/Phd/Paper_1/Phase_2_data/master_2024.sas7bdat")
-full_data2 <- read.csv("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/data/working_PAC_file_cg.csv")
+breed_data_raw <- read_sas("data/external/phase2/master_2024.sas7bdat")
+full_data2 <- read.csv("data/working_PAC_file_cg.csv")
 
 # Breed columns you care about
 breed_cols <- c(
@@ -63,6 +68,6 @@ breed_summary_growing <- count_nonzero(
 )
 
 # ---- Save ----
-write_csv(full_data3, "/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/data/working_PAC_file_with_breed_composition.csv")
-write_csv(breed_summary_all, "/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/data/breed_summary_all.csv")
-#write_csv(breed_summary_growing, "/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/data/breed_summary_growing.csv")
+write_csv(full_data3, "data/working_PAC_file_with_breed_composition.csv")
+write_csv(breed_summary_all, "data/breed_summary_all.csv")
+#write_csv(breed_summary_growing, "data/breed_summary_growing.csv")

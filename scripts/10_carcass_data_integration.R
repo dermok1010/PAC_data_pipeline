@@ -1,25 +1,32 @@
+
+# VM working version (2026-09-15) -- see 01_sheep_ire_merge.R header for full context.
+# Standalone. NOTE: its output (PAC_data_before_edits_plus_carcass.csv) is
+# a dead end -- grepping the whole legacy pipeline shows no other script
+# reads it. Run here only to sanity-check the script itself, not because
+# anything downstream depends on it.
+
 library(dplyr)
 
-setwd("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/")
+setwd("/home/dermodkkelly/PAC_data_pipeline/")
 
 data <- read.csv("data/PAC_data_before_edits.csv")
 dim(data)
-carcass <- read.csv("/home/dermot.kelly/Dermot_analysis/Phd/Paper_1/Phase_2_data/sheepcarcass.csv")
+carcass <- read.csv("data/external/phase2/sheepcarcass.csv")
 
 find_slaughter_weights <- function(methane_data, carcass_data, max_days = 30) {
-  
+
   # --- Parse dates ---
   methane_data2 <- methane_data %>%
     mutate(
       date = as.Date(date, tryFormats = c("%d/%m/%Y", "%Y-%m-%d")),
       row_id = row_number()
     )
-  
+
   carcass_data2 <- carcass_data %>%
     mutate(
       dos = as.Date(dos, tryFormats = c("%d/%m/%Y", "%Y-%m-%d"))
     )
-  
+
   # --- Make all possible matches, compute diffs, keep only valid carcass matches ---
   candidates <- methane_data2 %>%
     select(row_id, ANI_ID, date) %>%
@@ -36,7 +43,7 @@ find_slaughter_weights <- function(methane_data, carcass_data, max_days = 30) {
     group_by(row_id) %>%
     slice_min(slaughter_days_difference, n = 1, with_ties = FALSE) %>%
     ungroup()
-  
+
   # --- Join best match back; methane rows with no valid match remain, carcass cols = NA ---
   out <- methane_data2 %>%
     left_join(
@@ -45,7 +52,7 @@ find_slaughter_weights <- function(methane_data, carcass_data, max_days = 30) {
       by = "row_id"
     ) %>%
     select(-row_id)
-  
+
   out
 }
 
@@ -62,18 +69,18 @@ dim(final_slaughter_data)
 
 
 calculate_DTS <- function(data) {
-  
+
   data %>%
     mutate(
       birthdate = as.Date(animal_birthdate, tryFormats = c("%d/%m/%Y", "%Y-%m-%d")),
       dos       = as.Date(dos, tryFormats = c("%d/%m/%Y", "%Y-%m-%d")),
-      
+
       DTS_raw = case_when(
-        !is.na(birthdate) & !is.na(dos) ~ 
+        !is.na(birthdate) & !is.na(dos) ~
           as.numeric(difftime(dos, birthdate, units = "days")),
         TRUE ~ NA_real_
       ),
-      
+
       # Keep only biologically valid growing-animal DTS
       DTS = case_when(
         !is.na(DTS_raw) & DTS_raw >= 0 & DTS_raw <= 450 ~ DTS_raw,
@@ -92,4 +99,3 @@ sum(!is.na(data2$DTS))
 dim(data2)
 
 write.csv(data2, "data/PAC_data_before_edits_plus_carcass.csv", row.names = F)
-

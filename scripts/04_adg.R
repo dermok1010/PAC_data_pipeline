@@ -1,10 +1,16 @@
+
+# VM working version (2026-09-15) -- see 01_sheep_ire_merge.R header for full context.
+# Must be run in the same R session as 01-03 (uses in-memory full_data2 object).
+
+setwd("/home/dermodkkelly/PAC_data_pipeline/")
+
 library(dplyr)
 library(readr)
 
 # ---- Inputs ----
-full_data <- full_data2  # <-- replace with your full dataset object
+full_data <- full_data2  # carried in-memory from 03_weight_before_after_merge.R
 weights <- read_csv(
-  "/home/dermot.kelly/Dermot_analysis/Phd/Paper_1/Phase_2_data/Sheep_weights.csv",
+  "data/external/phase2/Sheep_weights.csv",
   col_types = cols(
     ANI_ID = col_double(),
     weighing_date = col_date(format = "%d/%m/%Y"),
@@ -86,4 +92,4 @@ full_data2 %>%
 
 
 # ---- Save interim ----
-write.csv(full_data2, "/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/data/working_PAC_file_adg.csv", row.names = F)
+write.csv(full_data2, "data/working_PAC_file_adg.csv", row.names = F)

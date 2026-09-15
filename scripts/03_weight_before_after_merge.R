@@ -1,15 +1,18 @@
 
+# VM working version (2026-09-15) -- see 01_sheep_ire_merge.R header for full context.
+# Must be run in the same R session as 01-02 (uses in-memory final_data object).
 
+setwd("/home/dermodkkelly/PAC_data_pipeline/")
 
 library(dplyr)
 library(readr)
 
 # ---- Inputs ----
-full_data <- final_data  
+full_data <- final_data  # carried in-memory from 02_dmi_merge.R
 
 
 weight_data <- read_csv(
-  "/home/dermot.kelly/Dermot_analysis/Phd/Paper_1/Phase_2_data/Sheep_weights.csv",
+  "data/external/phase2/Sheep_weights.csv",
   col_types = cols(
     ANI_ID = col_double(),
     weighing_date = col_date(format = "%d/%m/%Y"),
@@ -101,6 +104,4 @@ full_data2 %>%
 
 
 
-write.csv(full_data2, "/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/data/working_PAC_file_weight_bef_aft.csv", row.names = F)
-
-
+write.csv(full_data2, "data/working_PAC_file_weight_bef_aft.csv", row.names = F)

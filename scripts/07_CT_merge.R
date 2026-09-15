@@ -1,11 +1,17 @@
+
+# VM working version (2026-09-15) -- see 01_sheep_ire_merge.R header for full context.
+# Standalone (reads 06's disk output). Writes PAC_data_before_edits.csv,
+# the same file already verified as the byte-identical input to the
+# previously sanity-checked 08/09 scripts -- compare this run's output
+# against data/EXPECTED_PAC_data_before_edits.csv.
+
 library(dplyr)
 library(readr)
 
-setwd("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/")
+setwd("/home/dermodkkelly/PAC_data_pipeline/")
 
 data    <- read_csv("data/working_PAC_file_with_breed_composition.csv", show_col_types = FALSE)
-CT_data <- read_csv("/home/dermot.kelly/Dermot_analysis/Phd/Paper_1/Re-run 2024/data/CT_data.csv",
-                    show_col_types = FALSE)
+CT_data <- read_csv("data/external/rerun2024/CT_data.csv", show_col_types = FALSE)
 
 
 
@@ -40,7 +46,7 @@ CT_data2 <- CT_data %>%
   select(any_of(ct_keep))
 
 # ==========================================================
-# 3) MATCH CT ONLY IF WITHIN ±3 DAYS AND SAME YEAR
+# 3) MATCH CT ONLY IF WITHIN +/-3 DAYS AND SAME YEAR
 #    (closest match kept per ANI_ID + PAC date)
 # ==========================================================
 
@@ -70,7 +76,7 @@ cat("\n--- Date ranges ---\n")
 print(range(full_data$date, na.rm = TRUE))
 print(range(full_data$Scan_Date, na.rm = TRUE))
 
-cat("\n--- CT coverage (growing only, ±3 days, same year) ---\n")
+cat("\n--- CT coverage (growing only, +/-3 days, same year) ---\n")
 full_data %>%
   summarise(
     n_rows = n(),
@@ -115,8 +121,6 @@ CT_data %>%
     n_scanned_both_years = sum(n_years > 1)
   ) %>%
   print()
-
-
 
 
 

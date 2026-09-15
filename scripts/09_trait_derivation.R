@@ -1,7 +1,7 @@
 
 
 
-setwd("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/")
+setwd("/home/dermodkkelly/PAC_data_pipeline/")
 
 library(dplyr)
 library(readr)

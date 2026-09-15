@@ -1,6 +1,10 @@
 
 
-setwd("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/")
+setwd("/home/dermodkkelly/PAC_data_pipeline/")
+library(dplyr)  # moved up from line 13 (original): n_distinct() below is a dplyr
+                # function used before library(dplyr) was loaded in the legacy
+                # script -- only works interactively with a pre-loaded session.
+                # Legacy copy left untouched; this is a patched working copy.
 
 pac_raw <- read.csv("data/PAC_data_before_edits.csv")
 

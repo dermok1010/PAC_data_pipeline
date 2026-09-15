@@ -1,9 +1,14 @@
 
+# VM working version (2026-09-15) -- see 01_sheep_ire_merge.R header for full context.
+# Standalone. Reads 09's output (PAC_data_covariates_QC_NA_with_traits.csv),
+# not 10's -- confirmed by grep that this is the correct/only consumer
+# chain (data_generation.R reads THIS script's output next).
+
 library(dplyr)
 library(data.table)
-setwd("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/")
+setwd("/home/dermodkkelly/PAC_data_pipeline/")
 
-SI  <- read.csv("/home/dermot.kelly/Dermot_primary/Paper_1/data/sheeppedweight.csv")
+SI  <- read.csv("data/external/paper1/sheeppedweight.csv")
 data <- read.csv("data/PAC_data_covariates_QC_NA_with_traits.csv")
 
 colnames(data)

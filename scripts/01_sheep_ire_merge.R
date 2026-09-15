@@ -5,7 +5,35 @@
 # - Derive ewe_check, growing_check, bio_group (ewe overrides)
 # - For ewes: attach ewe_birth_rank / ewe_rearing_rank from
 #   most recent lambing event before pac_date
+#
+# VM working version (2026-09-15), verified end-to-end against the
+# manuscript's reported QC/trait numbers. The original HPC working-tree
+# version this was rebased from is preserved unmodified at
+# dermodkkelly/methane_selection_revision:analysis/legacy/PAC_data_pipeline/
+# on the VM, and of course still exists on the HPC itself. Full
+# verification writeup (cell-by-cell comparison against the previously
+# captured output, findings, open questions) lives in that repo's
+# docs/manuscript_context.md.
+#
+# Changes vs the prior committed version of this script:
+#   - All absolute paths repointed at this repo's own data/ layout
+#     (data/external/... for raw inputs from other projects, data/... for
+#     this pipeline's own intermediate/output files) and setwd() added so
+#     the script runs regardless of invocation directory.
+#   - The old trailing block (a sanity-check / "growing_animals_2024_raw.csv"
+#     / "ewes_2024_raw.csv" export) is DELETED here, not patched. That
+#     block referenced objects (ewes_lambing_dates, common_animals,
+#     ewes_only_subset) that are never defined anywhere in the script --
+#     it cannot have run as part of a clean top-to-bottom execution of
+#     this file, and grepping the whole pipeline confirms those two
+#     output files are never read by any other script (dead-end outputs,
+#     not pipeline inputs).
+#   - This script must still be run in the same R session as 02-05
+#     (they pass data as in-memory objects, not through disk) -- see
+#     run_01_to_05.R.
 ############################################################
+
+setwd("/home/dermodkkelly/PAC_data_pipeline/")
 
 library(dplyr)
 library(data.table)
@@ -22,8 +50,8 @@ safe_max_numeric <- function(x) {
 #----------------------------
 # 1) Load
 #----------------------------
-SI <- read.csv("/home/dermot.kelly/Dermot_primary/Paper_1/data/sheeppedweight.csv")
-FD <- read.csv("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/data/PACfile_ani_id.csv")
+SI <- read.csv("data/external/paper1/sheeppedweight.csv")
+FD <- read.csv("data/PACfile_ani_id.csv")
 
 FD <- FD %>%
   filter(!is.na(ANI_ID)) %>%
@@ -150,24 +178,24 @@ setkey(ewe_event, ANI_ID_DAM, lamb_birthdate)
 ewe_pac_idx <- which(FD_dt$bio_group == "ewe" & !is.na(FD_dt$pac_date))
 
 if (length(ewe_pac_idx) > 0) {
-  
+
   lookup <- FD_dt[ewe_pac_idx, .(
     row_id = ewe_pac_idx,
     ANI_ID_DAM = ANI_ID,
-    
+
     # Use pac_date - 1 so the matched event is strictly before PAC date.
     # Change to pac_date if you want lambing on the same day to be allowed.
     lamb_birthdate = pac_date - 1L
   )]
-  
+
   setkey(lookup, ANI_ID_DAM, lamb_birthdate)
-  
+
   matched <- ewe_event[lookup, roll = TRUE]
-  
+
   FD_dt[matched$row_id, ewe_birth_rank := matched$ewe_birth_rank]
   FD_dt[matched$row_id, ewe_rearing_rank := matched$ewe_rearing_rank]
   FD_dt[matched$row_id, ewe_lambing_date := matched$actual_lambing_date]
-  
+
   FD_dt[, days_since_lambing := as.numeric(pac_date - ewe_lambing_date)]
 }
 
@@ -220,57 +248,8 @@ print(
 #----------------------------
 write.csv(
   FD,
-  "/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/data/PAC_data_all_raw.csv",
+  "data/PAC_data_all_raw.csv",
   row.names = FALSE
 )
 
 cat("\nSaved: PAC_data_all_raw.csv\n")
-#######################
-
-# A check
-# Check the number of distinct dam IDs in the original dataset and the summarized dataset
-original_count <- n_distinct(ewes_lambing_dates$ANI_ID_DAM)
-summarized_count <- n_distinct(ewes_first_lambing$ANI_ID_DAM)
-
-# Print counts to ensure all ewes are accounted for
-cat("Original distinct ewes:", original_count, "\n")
-cat("Summarized distinct ewes:", summarized_count, "\n")
-
-# Check for any NA values in first_lambing_date after summarizing
-missing_dates <- ewes_first_lambing %>%
-  filter(is.na(first_lambing_date))
-
-# Print any ewes with missing first_lambing_date
-if (nrow(missing_dates) > 0) {
-  cat("Ewes with missing first lambing date:\n")
-  print(missing_dates)
-} else {
-  cat("No dates were lost; all first lambing dates are accounted for.\n")
-}
-
-View(common_animals
-)
-
-
-# Subset 1: All growing animals cannot be ewes
-growing_animals_subset <- common_animals %>%
-  filter(growing_check == "growing_animal" & is.na(ewe_check))
-
-
-
-# Subset 2: Ewes can be growing
-ewes_subset <- common_animals %>%
-  filter(ewe_check == "ewe")
-
-
-# View the results
-View(growing_animals_subset)
-View(ewes_only_subset)
-nrow(growing_animals_subset)
-nrow(ewes_subset
-)
-
-
-write.csv(growing_animals_subset, "/home/dermot.kelly/Phd/Paper_1/Re-run 2024/data/growing_animals_2024_raw.csv", row.names = F)
-write.csv(ewes_subset, "/home/dermot.kelly/Phd/Paper_1/Re-run 2024/data/ewes_2024_raw.csv", row.names = F)
-

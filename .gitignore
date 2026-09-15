@@ -33,6 +33,7 @@ Thumbs.db
 # Large files
 # =========================
 
+*.sas7bdat
 *.csv
 *.xlsx
 *.xls
@@ -41,3 +42,4 @@ Thumbs.db
 *.gz
 *.zip
 *.log
+Rplots.pdf
