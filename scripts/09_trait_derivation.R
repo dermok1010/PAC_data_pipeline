@@ -46,13 +46,22 @@ data2 <- data %>%
       !is.na(ch4_g_day2_1v3) & !is.na(ct_rumen) & ct_rumen > 0,
       ch4_g_day2_1v3 / ct_rumen,
       NA_real_
+    ),
+    
+    # 7) CH4 proportion of total gas (CH4 / (CH4 + CO2))
+    ch4_ratio = ifelse(
+      !is.na(ch4_g_day2_1v3) & !is.na(co2_g_day2_1v3) &
+        (ch4_g_day2_1v3 + co2_g_day2_1v3) > 0,
+      ch4_g_day2_1v3 / (ch4_g_day2_1v3 + co2_g_day2_1v3),
+      NA_real_
     )
   )
 
 
 derived_cols <- c(
   "Metabolic_BW","methane_per_mbw","methane_per_adg",
-  "methane_per_dmi","methane_per_muscle","methane_per_rumen"
+  "methane_per_dmi","methane_per_muscle","methane_per_rumen",
+  "ch4_ratio"
 )
 
 data2 %>%
@@ -63,4 +72,8 @@ summary(data2$methane_per_mbw)
 summary(data2$methane_per_dmi)
 
 
+
 write_csv(data2, "data/PAC_data_covariates_QC_NA_with_traits.csv")
+
+
+

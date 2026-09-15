@@ -3,7 +3,7 @@
 library(dplyr)
 
 add_contemporary_group <- function(data,
-                                   date_col = "date",
+                                   date_col = "pac_date",
                                    flock_col = "source",
                                    run_col = "lot_no",
                                    methane_col = "ch4_g_day2_1v3",
@@ -47,7 +47,7 @@ add_contemporary_group <- function(data,
 
 cg_res <- add_contemporary_group(
   data = full_data2,
-  date_col = "date",
+  date_col = "pac_date",
   flock_col = "source",
   run_col = "lot_no",
   methane_col = "ch4_g_day2_1v3",

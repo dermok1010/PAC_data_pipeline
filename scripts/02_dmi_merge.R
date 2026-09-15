@@ -6,7 +6,7 @@ library(haven)
 # ---- Inputs ----
 dmi_data <- read_sas("/home/dermot.kelly/Dermot_analysis/Phd/Paper_1/Re-run 2024/data/dmi.sas7bdat")
 
-methane_data <- common_animals  # replace with your object or read from interim file
+methane_data <- FD  # replace with your object or read from interim file
 names(methane_data)
 names(dmi_data)
 
@@ -21,17 +21,17 @@ dmi_min <- dmi_data %>%
 methane_min <- methane_data %>%
   mutate(
     ANI_ID = as.character(ANI_ID),
-    date = as.Date(date, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"))
+    date = as.Date(pac_date, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"))
   )
 
 
 attach_closest_dmi <- function(methane_df, dmi_df, max_days = 30) {
   candidates <- methane_df %>%
     mutate(row_id = row_number()) %>%
-    select(row_id, ANI_ID, date) %>%
+    select(row_id, ANI_ID, pac_date) %>%
     inner_join(dmi_df, by = "ANI_ID", relationship = "many-to-many") %>%
     mutate(
-      DMI_date_diff_days = abs(as.integer(difftime(date, Start_Date, units = "days")))
+      DMI_date_diff_days = abs(as.integer(difftime(pac_date, Start_Date, units = "days")))
     ) %>%
     filter(DMI_date_diff_days <= max_days) %>%
     group_by(row_id) %>%

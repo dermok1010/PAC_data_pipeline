@@ -14,8 +14,8 @@ CT_data <- read_csv("/home/dermot.kelly/Dermot_analysis/Phd/Paper_1/Re-run 2024/
 full_data <- data %>%
   mutate(
     ANI_ID = as.character(ANI_ID),
-    date   = as.Date(date, tryFormats = c("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y")),
-    pac_year = as.integer(format(date, "%Y"))
+    date   = as.Date(pac_date, tryFormats = c("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y")),
+    pac_year = as.integer(format(pac_date, "%Y"))
   )
 
 # ---- 2) Prep CT data ----
@@ -47,23 +47,23 @@ CT_data2 <- CT_data %>%
 max_days <- 3
 
 ct_matches <- full_data %>%
-  filter(growing_check == "growing_animal") %>%
-  select(ANI_ID, date, pac_year) %>%
+  filter(bio_group == "growing") %>%
+  select(ANI_ID, pac_date, pac_year) %>%
   distinct() %>%
   inner_join(CT_data2, by = "ANI_ID") %>%
   filter(ct_year == pac_year) %>%   # <-- THIS is the key change
   mutate(
-    ct_diff_days = as.integer(difftime(Scan_Date, date, units = "days")),
+    ct_diff_days = as.integer(difftime(Scan_Date, pac_date, units = "days")),
     ct_abs_diff_days = abs(ct_diff_days)
   ) %>%
   filter(ct_abs_diff_days <= max_days) %>%
-  group_by(ANI_ID, date) %>%
+  group_by(ANI_ID, pac_date) %>%
   slice_min(ct_abs_diff_days, n = 1, with_ties = FALSE) %>%
   ungroup()
 
 # ---- Merge valid matches back ----
 full_data <- full_data %>%
-  left_join(ct_matches, by = c("ANI_ID", "date"))
+  left_join(ct_matches, by = c("ANI_ID", "pac_date"))
 
 # ---- 4) QC ----
 cat("\n--- Date ranges ---\n")
@@ -74,9 +74,9 @@ cat("\n--- CT coverage (growing only, ±3 days, same year) ---\n")
 full_data %>%
   summarise(
     n_rows = n(),
-    n_growing = sum(growing_check == "growing_animal", na.rm = TRUE),
-    n_growing_with_ct = sum(growing_check == "growing_animal" & !is.na(ct_muscle_kg)),
-    pct_growing_with_ct = mean(growing_check == "growing_animal" & !is.na(ct_muscle_kg), na.rm = TRUE) * 100,
+    n_growing = sum(bio_group == "growing", na.rm = TRUE),
+    n_growing_with_ct = sum(bio_group == "growing" & !is.na(ct_muscle_kg)),
+    pct_growing_with_ct = mean(bio_group == "growing_animal" & !is.na(ct_muscle_kg), na.rm = TRUE) * 100,
     max_abs_gap = max(ct_abs_diff_days, na.rm = TRUE)
   ) %>%
   print()

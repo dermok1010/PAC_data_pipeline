@@ -4,6 +4,7 @@ setwd("/home/dermot.kelly/Dermot_analysis/Phd/PAC_data_pipeline/")
 
 pac_raw <- read.csv("data/PAC_data_before_edits.csv")
 
+dim(pac_raw)
 n_distinct(pac_raw$ANI_ID)
 ###############################################################################
 ### PAC QC: CH4 + CO2 outlier removal (DROP failed records)
@@ -141,104 +142,6 @@ print(final_summary)
 
 
 
-################################################################
-
-#### Remove earlier trait columns
-
-################################################################
-
-derived_cols <- c(
-  "methane_per_unit_dmi",
-  "methane_per_adg"
-)
-
-full_data <- pac_clean %>%
-  select(-any_of(derived_cols))
-
-
-write_csv(full_data, "data/PAC_outlier_removal_no_traits.csv")
-
-full_data <- read.csv("data/PAC_outlier_removal_no_traits.csv")
-
-#################################################################
-
-### Fix biological groups
-
-#################################################################
-
-
-# Any animals falling in both categories will be treated as ewe
-full_data <- full_data %>%
-  mutate(
-    bio_group = case_when(
-      ewe_check == "ewe" ~ "ewe",
-      growing_check == "growing_animal" ~ "growing",
-      TRUE ~ NA_character_
-    )
-  )
-
-
-table(full_data$bio_group, useNA = "ifany")
-
-na_group <- full_data %>% filter(is.na(bio_group))
-
-nrow(na_group)
-n_distinct(na_group$ANI_ID)
-
-na_group %>%
-  count(SEX, sort = TRUE)
-
-na_group %>%
-  summarise(
-    n = n(),
-    n_age_na = sum(is.na(age_at_treatment)),
-    pct_age_na = mean(is.na(age_at_treatment)) * 100,
-    min_age = min(age_at_treatment, na.rm = TRUE),
-    p25 = quantile(age_at_treatment, 0.25, na.rm = TRUE),
-    median_age = median(age_at_treatment, na.rm = TRUE),
-    p75 = quantile(age_at_treatment, 0.75, na.rm = TRUE),
-    max_age = max(age_at_treatment, na.rm = TRUE)
-  )
-
-na_group %>%
-  filter(SEX == "F") %>%
-  summarise(
-    n = n(),
-    n_first_lambing_na = sum(is.na(first_lambing_date)),
-    pct_no_lambing_record = mean(is.na(first_lambing_date)) * 100
-  )
-
-na_group %>%
-  filter(!is.na(age_at_treatment)) %>%
-  mutate(age_years = age_at_treatment / 365) %>%
-  summarise(
-    min_yrs = min(age_years),
-    median_yrs = median(age_years),
-    max_yrs = max(age_years)
-  )
-
-na_group %>%
-  summarise(
-    ch4_mean = mean(ch4_g_day2_1v3, na.rm = TRUE),
-    ch4_sd = sd(ch4_g_day2_1v3, na.rm = TRUE)
-  )
-
-
-full_data <- full_data %>%
-  mutate(
-    bio_group = case_when(
-      ewe_check == "ewe" ~ "ewe",
-      age_at_treatment <= 660 ~ "growing",
-      age_at_treatment > 660 ~ "ewe",
-      TRUE ~ NA_character_
-    )
-  )
-
-
-table(full_data$bio_group, useNA = "ifany")
-
-
-
 ############################################################################
 
 ## Covariate outlier removal 
@@ -257,251 +160,87 @@ flag_iqr_na <- function(x, multiplier = 1.5) {
   ifelse(!is.na(x) & (x < lower | x > upper), NA, x)
 }
 
-
 iqr_mult <- 1.5
 
-
-full_data_qc2 <- full_data %>%
-  group_by(bio_group) %>%
+full_data_qc2 <- pac_clean %>%
   mutate(
-    # Applies to both groups
-    weight = flag_iqr_na(weight, iqr_mult),
-    DMI    = flag_iqr_na(DMI, iqr_mult),
-    
-    # Growing only
-    adg = ifelse(bio_group == "growing", flag_iqr_na(adg, iqr_mult), adg),
-    ct_muscle_kg = ifelse(bio_group == "growing", flag_iqr_na(ct_muscle_kg, iqr_mult), ct_muscle_kg),
-    ct_rumen     = ifelse(bio_group == "growing", flag_iqr_na(ct_rumen, iqr_mult), ct_rumen)
-  ) %>%
-  ungroup()
+    weight       = flag_iqr_na(weight, iqr_mult),
+    DMI          = flag_iqr_na(DMI, iqr_mult),
+    adg          = flag_iqr_na(adg, iqr_mult),
+    ct_muscle_kg = flag_iqr_na(ct_muscle_kg, iqr_mult),
+    ct_rumen     = flag_iqr_na(ct_rumen, iqr_mult)
+  )
 
 covariates <- c("weight", "DMI", "adg", "ct_muscle_kg", "ct_rumen")
 
-qc2_summary <- tibble(
-  covariate = covariates,
-  new_NA = sapply(covariates, function(v) {
-    sum(is.na(full_data_qc2[[v]]) & !is.na(full_data[[v]]))
-  }),
-  pct_new_NA = sapply(covariates, function(v) {
-    sum(is.na(full_data_qc2[[v]]) & !is.na(full_data[[v]])) /
-      sum(!is.na(full_data[[v]])) * 100
-  })
-)
-
-qc2_summary
 
 
+hist(pac_raw$ch4_g_day2_1v3)
+hist(pac_clean$ch4_g_day2_1v3)
 
-availability_n_records_animals <- function(before_df,
-                                           after_df,
-                                           id_col = "ANI_ID",
-                                           group_col = "bio_group",
-                                           groups = c("ewe", "growing"),
-                                           vars = c("weight", "DMI")) {
-  
-  summarise_stage <- function(df, stage_label) {
-    
-    df2 <- df %>%
-      filter(.data[[group_col]] %in% groups)
-    
-    # Core counts by group
-    by_group_core <- df2 %>%
-      group_by(.data[[group_col]]) %>%
-      summarise(
-        n_records = n(),
-        n_animals = n_distinct(.data[[id_col]]),
-        .groups = "drop"
-      ) %>%
-      rename(bio_group = all_of(group_col)) %>%
-      mutate(stage = stage_label)
-    
-    # Optional: variable availability (records + animals)
-    if (!is.null(vars) && length(vars) > 0) {
-      vars <- intersect(vars, names(df2))
-      
-      by_group_vars <- df2 %>%
-        group_by(.data[[group_col]]) %>%
-        summarise(
-          across(all_of(vars), ~sum(!is.na(.x)), .names = "{.col}_records_nonNA"),
-          across(all_of(vars), ~n_distinct(.data[[id_col]][!is.na(.x)]), .names = "{.col}_animals_nonNA"),
-          .groups = "drop"
-        ) %>%
-        rename(bio_group = all_of(group_col))
-      
-      by_group <- by_group_core %>%
-        left_join(by_group_vars, by = "bio_group")
-    } else {
-      by_group <- by_group_core
-    }
-    
-    # Overall totals
-    overall_core <- df2 %>%
-      summarise(
-        n_records = n(),
-        n_animals = n_distinct(.data[[id_col]])
-      ) %>%
-      mutate(bio_group = "overall", stage = stage_label)
-    
-    if (!is.null(vars) && length(vars) > 0 && length(intersect(vars, names(df2))) > 0) {
-      vars <- intersect(vars, names(df2))
-      
-      overall_vars <- df2 %>%
-        summarise(
-          across(all_of(vars), ~sum(!is.na(.x)), .names = "{.col}_records_nonNA"),
-          across(all_of(vars), ~n_distinct(.data[[id_col]][!is.na(.x)]), .names = "{.col}_animals_nonNA")
-        ) %>%
-        mutate(bio_group = "overall")
-      
-      overall <- overall_core %>%
-        left_join(overall_vars, by = "bio_group")
-    } else {
-      overall <- overall_core
-    }
-    
-    bind_rows(by_group, overall) %>%
-      arrange(factor(bio_group, levels = c("ewe", "growing", "overall")))
-  }
-  
-  bind_rows(
-    summarise_stage(before_df, "before"),
-    summarise_stage(after_df,  "after")
-  ) %>%
-    select(stage, bio_group, everything())
-}
-
-# ---- Run it (weight + DMI included) ----
-avail_table <- availability_n_records_animals(
-  before_df = full_data,
-  after_df  = full_data_qc2,
-  vars      = c("ct_rumen", "ct_muscle_kg", "adg")
-)
-
-View(avail_table)
-
-##############################################################
-
-#### DMI indoor/outdoor
-
-##############################################################
-
-library(lubridate)
-print(head(full_data_qc2$DMI_Start_Date))
-
-season_data <- full_data_qc2 %>%
-  mutate(
-    DMI_Start_Date = as.Date(DMI_Start_Date),
-    DMI_month = month(DMI_Start_Date)
-  )
-
-# Label months
-season_data <- season_data %>%
-  mutate(
-    DMI_month_name = month(DMI_Start_Date, label = TRUE, abbr = TRUE)
-  )
-
-# See monthly distribution
-season_data %>%
-  filter(!is.na(DMI_month_name)) %>%
-  group_by(DMI_month_name) %>%
-  summarise(
-    n_records = n(),
-    n_animals = n_distinct(ANI_ID),
-    .groups = "drop"
-  ) %>%
-  arrange(DMI_month_name)
-
-
-# Further inspection is needed on October data
-season_data %>%
-  filter(DMI_month_name == "Oct") %>%
-  group_by(source, bio_group, diet_type) %>%
-  summarise(
-    n_records = n(),
-    n_animals = n_distinct(ANI_ID),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(n_records))
-
-
-
-flag_dmi_environment <- function(df,
-                                 date_col = "DMI_Start_Date",
-                                 month_name_col = "DMI_month_name",  # if already exists
-                                 id_col = "ANI_ID",
-                                 group_col = "bio_group",
-                                 indoor_months = c("Oct","Nov","Dec","Feb"),
-                                 outdoor_months = c("Apr","May","Jul","Aug"),
-                                 env_col = "dmi_env") {
-  
-  # Make sure we have a month name column (avoid lubridate; use base R)
-  if (!month_name_col %in% names(df)) {
-    stopifnot(date_col %in% names(df))
-    df <- df %>%
-      mutate(
-        "{date_col}" := as.Date(.data[[date_col]]),
-        "{month_name_col}" := factor(
-          format(.data[[date_col]], "%b"),
-          levels = c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"),
-          ordered = TRUE
-        )
-      )
-  }
-  
-  df2 <- df %>%
-    mutate(
-      "{env_col}" := case_when(
-        as.character(.data[[month_name_col]]) %in% indoor_months  ~ "indoor",
-        as.character(.data[[month_name_col]]) %in% outdoor_months ~ "outdoor",
-        TRUE ~ NA_character_
-      )
-    )
-  
-  # Summary: env x bio_group
-  by_env_group <- df2 %>%
-    filter(!is.na(.data[[env_col]]),
-           !is.na(.data[[group_col]]),
-           .data[[group_col]] %in% c("ewe","growing")) %>%
-    group_by(.data[[env_col]], .data[[group_col]]) %>%
-    summarise(
-      n_records = n(),
-      n_animals = n_distinct(.data[[id_col]]),
-      .groups = "drop"
-    ) %>%
-    rename(dmi_env = all_of(env_col), bio_group = all_of(group_col)) %>%
-    arrange(dmi_env, bio_group)
-  
-  # Overall per env
-  overall_env <- df2 %>%
-    filter(!is.na(.data[[env_col]])) %>%
-    group_by(.data[[env_col]]) %>%
-    summarise(
-      n_records = n(),
-      n_animals = n_distinct(.data[[id_col]]),
-      .groups = "drop"
-    ) %>%
-    rename(dmi_env = all_of(env_col)) %>%
-    mutate(bio_group = "overall") %>%
-    relocate(bio_group, .after = dmi_env) %>%
-    arrange(dmi_env)
-  
-  list(
-    data = df2,
-    summary = bind_rows(by_env_group, overall_env) %>%
-      arrange(dmi_env, factor(bio_group, levels = c("ewe","growing","overall")))
-  )
-}
-
-
-res_env <- flag_dmi_environment(season_data)
-
-season_data2 <- res_env$data
-res_env$summary
-
-
-
-
-write.csv(full_data_qc2,
+write.csv(pac_clean,
           "data/PAC_data_covariates_QC_NA.csv",
           row.names = FALSE)
+
+
+
+
+
+######################################
+
+## PAC removal sensitivity ###########
+
+######################################
+
+
+# Start from pac_raw - before ANY outlier removal
+pac_sens <- pac_raw %>%
+  mutate(
+    # Step 1: remove impossible values
+    ch4_g_day2_1v3 = if_else(ch4_g_day2_1v3 <= 0, NA_real_, ch4_g_day2_1v3),
+    co2_g_day2_1v3 = if_else(co2_g_day2_1v3 <= 0, NA_real_, co2_g_day2_1v3),
+    # Step 2: assign bio_group
+    bio_group = case_when(
+      ewe_check == "ewe" ~ "ewe",
+      age_at_treatment <= 660 ~ "growing",
+      age_at_treatment > 660 ~ "ewe",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  group_by(bio_group) %>%
+  mutate(
+    outlier_flag =
+      (!is.na(ch4_g_day2_1v3) &
+         (ch4_g_day2_1v3 < quantile(ch4_g_day2_1v3, 0.25, na.rm=TRUE) - 1.5*IQR(ch4_g_day2_1v3, na.rm=TRUE) |
+            ch4_g_day2_1v3 > quantile(ch4_g_day2_1v3, 0.75, na.rm=TRUE) + 1.5*IQR(ch4_g_day2_1v3, na.rm=TRUE))) |
+      (!is.na(co2_g_day2_1v3) &
+         (co2_g_day2_1v3 < quantile(co2_g_day2_1v3, 0.25, na.rm=TRUE) - 1.5*IQR(co2_g_day2_1v3, na.rm=TRUE) |
+            co2_g_day2_1v3 > quantile(co2_g_day2_1v3, 0.75, na.rm=TRUE) + 1.5*IQR(co2_g_day2_1v3, na.rm=TRUE))),
+    low_ch4_flag = !is.na(ch4_g_day2_1v3) & ch4_g_day2_1v3 < 4
+  ) %>%
+  ungroup() %>%
+  filter(!coalesce(outlier_flag, FALSE), !low_ch4_flag)
+
+# Compare N removed
+cat("Original method N remaining:", nrow(pac_clean), "\n")
+cat("Stratified method N remaining:", nrow(pac_sens), "\n")
+
+# Compare distributions
+summary(pac_sens$ch4_g_day2_1v3)
+summary(pac_clean$ch4_g_day2_1v3)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

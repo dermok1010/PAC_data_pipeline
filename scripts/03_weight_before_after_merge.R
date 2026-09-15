@@ -21,17 +21,17 @@ weight_data <- read_csv(
 methane_keys <- full_data %>%
   mutate(
     ANI_ID = as.character(ANI_ID),
-    date = as.Date(date, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"))
+    date = as.Date(pac_date, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"))
   ) %>%
-  distinct(ANI_ID, date)
+  distinct(ANI_ID, pac_date)
 
 # Remove duplicates of (ANI_ID, date) if they exist (optional but safe)
 dup_keys <- methane_keys %>%
-  count(ANI_ID, date) %>%
+  count(ANI_ID, pac_date) %>%
   filter(n > 1)
 
 methane_keys <- methane_keys %>%
-  anti_join(dup_keys, by = c("ANI_ID", "date"))
+  anti_join(dup_keys, by = c("ANI_ID", "pac_date"))
 
 # ---- Prep weights ----
 weight_data <- weight_data %>%
@@ -47,16 +47,16 @@ buffer_days <- 3
 
 candidates <- methane_keys %>%
   left_join(weight_data, by = "ANI_ID") %>%
-  mutate(diff_days = as.integer(difftime(weighing_date, date, units = "days"))) %>%
+  mutate(diff_days = as.integer(difftime(weighing_date, pac_date, units = "days"))) %>%
   filter(diff_days >= -window_days, diff_days <= window_days)
 
 before_data <- candidates %>%
   filter(diff_days <= -buffer_days) %>%
-  group_by(ANI_ID, date) %>%
+  group_by(ANI_ID, pac_date) %>%
   slice_max(order_by = diff_days, n = 1, with_ties = FALSE) %>%
   ungroup() %>%
   transmute(
-    ANI_ID, date,
+    ANI_ID, pac_date,
     weight_before = WEIGHT,
     weight_date_before = weighing_date,
     diff_days_before = diff_days
@@ -64,18 +64,18 @@ before_data <- candidates %>%
 
 after_data <- candidates %>%
   filter(diff_days >= buffer_days) %>%
-  group_by(ANI_ID, date) %>%
+  group_by(ANI_ID, pac_date) %>%
   slice_min(order_by = diff_days, n = 1, with_ties = FALSE) %>%
   ungroup() %>%
   transmute(
-    ANI_ID, date,
+    ANI_ID, pac_date,
     weight_after = WEIGHT,
     weight_date_after = weighing_date,
     diff_days_after = diff_days
   )
 
 weight_change <- before_data %>%
-  inner_join(after_data, by = c("ANI_ID", "date")) %>%
+  inner_join(after_data, by = c("ANI_ID", "pac_date")) %>%
   mutate(
     weight_diff = weight_after - weight_before
   )
@@ -84,9 +84,9 @@ weight_change <- before_data %>%
 full_data2 <- full_data %>%
   mutate(
     ANI_ID = as.character(ANI_ID),
-    date = as.Date(date, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"))
+    date = as.Date(pac_date, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"))
   ) %>%
-  left_join(weight_change, by = c("ANI_ID", "date"))
+  left_join(weight_change, by = c("ANI_ID", "pac_date"))
 
 # ---- QC summary ----
 full_data2 %>%

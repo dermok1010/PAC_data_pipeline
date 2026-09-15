@@ -16,7 +16,7 @@ weights <- read_csv(
 full_data <- full_data %>%
   mutate(
     ANI_ID = as.character(ANI_ID),
-    date = as.Date(date, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y")),
+    date = as.Date(pac_date, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y")),
     animal_birthdate = as.Date(animal_birthdate, tryFormats = c("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"))
   )
 
@@ -29,8 +29,8 @@ weights <- weights %>%
 
 # ---- Only growing animals get ADG ----
 growing_keys <- full_data %>%
-  filter(growing_check == "growing_animal") %>%
-  select(ANI_ID, date, animal_birthdate) %>%
+  filter(bio_group == "growing") %>%
+  select(ANI_ID, pac_date, animal_birthdate) %>%
   distinct()
 
 # ---- Candidate weights within +/-120d excluding +/-3d ----
@@ -40,7 +40,7 @@ buffer_days <- 3
 candidates <- growing_keys %>%
   left_join(weights, by = "ANI_ID") %>%
   mutate(
-    diff_days = as.integer(difftime(weighing_date, date, units = "days")),
+    diff_days = as.integer(difftime(weighing_date, pac_date, units = "days")),
     age_in_days = as.integer(difftime(weighing_date, animal_birthdate, units = "days"))
   ) %>%
   filter(
@@ -51,7 +51,7 @@ candidates <- growing_keys %>%
 
 # ---- Regression ADG per (ANI_ID, date) ----
 adg_table <- candidates %>%
-  group_by(ANI_ID, date) %>%
+  group_by(ANI_ID, pac_date) %>%
   summarise(
     n_w = n(),
     span_days = max(age_in_days) - min(age_in_days),
@@ -63,29 +63,25 @@ adg_table <- candidates %>%
     adg = if_else(!is.na(adg) & (adg < 0.01 | adg > 2), NA_real_, adg),
     adg = if_else(span_days < 14, NA_real_, adg)  # optional stability guardrail
   ) %>%
-  select(ANI_ID, date, adg)   # <- keep only what you want to write back
+  select(ANI_ID, pac_date, adg)   # <- keep only what you want to write back
 
 # ---- Join back and compute methane_per_adg ----
 full_data2 <- full_data %>%
-  left_join(adg_table, by = c("ANI_ID", "date")) %>%
-  mutate(
-    methane_per_adg = if_else(!is.na(adg) & adg > 0, ch4_g_day2_1v3 / adg, NA_real_)
-  )
+  left_join(adg_table, by = c("ANI_ID", "pac_date"))
 
 # ---- Optional: ensure ewes don't have ADG ----
 full_data2 <- full_data2 %>%
   mutate(
-    adg = if_else(growing_check == "growing_animal", adg, NA_real_),
-    methane_per_adg = if_else(growing_check == "growing_animal", methane_per_adg, NA_real_)
+    adg = if_else(bio_group == "growing", adg, NA_real_)
   )
 
 # ---- QC (prints but does not save extra cols) ----
 full_data2 %>%
   summarise(
     n_rows = n(),
-    n_growing_rows = sum(growing_check == "growing_animal", na.rm = TRUE),
-    n_growing_with_adg = sum(growing_check == "growing_animal" & !is.na(adg), na.rm = TRUE),
-    pct_growing_with_adg = mean(growing_check == "growing_animal" & !is.na(adg), na.rm = TRUE) * 100
+    n_growing_rows = sum(bio_group == "growing", na.rm = TRUE),
+    n_growing_with_adg = sum(bio_group == "growing" & !is.na(adg), na.rm = TRUE),
+    pct_growing_with_adg = mean(bio_group == "growing" & !is.na(adg), na.rm = TRUE) * 100
   )
 
 
